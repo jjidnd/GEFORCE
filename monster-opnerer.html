@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GEFOREC Realtime</title>
+  <style>
+    :root {
+      --primary-bg: #0f172a;
+      --secondary-bg: #1e293b;
+      --text-color: #f1f5f9;
+      --accent: #38bdf8;
+    }
+    .light-theme {
+      --primary-bg: #ffffff;
+      --secondary-bg: #f1f5f9;
+      --text-color: #0f172a;
+      --accent: #2563eb;
+    }
+    .blue-theme {
+      --primary-bg: #1e3a8a;
+      --secondary-bg: #3b82f6;
+      --text-color: #e0f2fe;
+      --accent: #facc15;
+    }
+    body {
+      background-color: var(--primary-bg);
+      color: var(--text-color);
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      display: flex;
+      height: 100vh;
+    }
+    .sidebar {
+      width: 240px;
+      background-color: var(--secondary-bg);
+      padding: 20px;
+      overflow-y: auto;
+    }
+    .main {
+      flex-grow: 1;
+      padding: 20px;
+      background-color: var(--primary-bg);
+    }
+    input, textarea, button {
+      padding: 10px;
+      border-radius: 6px;
+      border: none;
+      margin: 5px 0;
+      font-size: 16px;
+    }
+    input[type="text"], textarea {
+      width: 100%;
+      background-color: #e2e8f0;
+    }
+    button {
+      background-color: var(--accent);
+      color: black;
+      cursor: pointer;
+      margin-right: 5px;
+    }
+    .group {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background-color: var(--accent);
+      padding: 6px 10px;
+      border-radius: 6px;
+      margin: 4px 0;
+      color: black;
+    }
+  </style>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+</head>
+<body>
+  <div class="sidebar">
+    <h2>GEFOREC</h2>
+    <input id="groupInput" type="text" placeholder="Add Group" />
+    <button onclick="addGroup()">➕</button>
+    <div id="groupList"></div>
+    <button onclick="toggleTheme()">Toggle Theme</button>
+  </div>
+  <div class="main">
+    <input id="urlInput" type="text" placeholder="Paste URL and press Enter" onkeypress="handleKeyPress(event)" />
+    <div id="urlList"></div>
+    <button onclick="openAll()">Open All URLs</button>
+    <textarea id="dataBox" placeholder="Paste exported data here..."></textarea>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyCR9l1HxwEeykm7okHxdVOmT1oZXv2QVJM",
+      authDomain: "geforce-41129.firebaseapp.com",
+      databaseURL: "https://geforce-41129-default-rtdb.firebaseio.com/",
+      projectId: "geforce-41129",
+      storageBucket: "geforce-41129.appspot.com",
+      messagingSenderId: "40093432202",
+      appId: "1:40093432202:web:68f887f596fa760da57073"
+    };
+
+    const app = firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let currentGroup = '';
+    let themeIndex = 0;
+    const themes = ['', 'light-theme', 'blue-theme'];
+
+    const dataRef = db.ref('/geforecData');
+
+    function toggleTheme() {
+      document.body.classList.remove(...themes);
+      themeIndex = (themeIndex + 1) % themes.length;
+      document.body.classList.add(themes[themeIndex]);
+    }
+
+    function addGroup() {
+      const input = document.getElementById('groupInput');
+      const name = input.value.trim();
+      if (name) {
+        dataRef.child(name).set([]);
+        currentGroup = name;
+        input.value = '';
+      }
+    }
+
+    function handleKeyPress(e) {
+      if (e.key === 'Enter') {
+        const url = e.target.value.trim();
+        if (url && currentGroup) {
+          dataRef.child(currentGroup).once('value', snapshot => {
+            const urls = snapshot.val() || [];
+            urls.push(url);
+            dataRef.child(currentGroup).set(urls);
+          });
+          e.target.value = '';
+        }
+      }
+    }
+
+    function renderGroups(data) {
+      const list = document.getElementById('groupList');
+      list.innerHTML = '';
+      Object.keys(data).forEach(name => {
+        const div = document.createElement('div');
+        div.className = 'group';
+        div.innerHTML = `<span onclick="switchGroup('${name}')">${name}</span><button onclick="deleteGroup('${name}')">🗑️</button>`;
+        list.appendChild(div);
+      });
+    }
+
+    function renderURLs(urls) {
+      const list = document.getElementById('urlList');
+      list.innerHTML = '';
+      urls.forEach((url, i) => {
+        const div = document.createElement('div');
+        div.className = 'group';
+        div.innerHTML = `<a href="${url}" target="_blank">${url}</a><button onclick="removeURL(${i})">🗑️</button>`;
+        list.appendChild(div);
+      });
+    }
+
+    function switchGroup(name) {
+      currentGroup = name;
+      dataRef.child(name).on('value', snapshot => {
+        const urls = snapshot.val() || [];
+        renderURLs(urls);
+      });
+    }
+
+    function deleteGroup(name) {
+      dataRef.child(name).remove();
+      if (currentGroup === name) currentGroup = '';
+    }
+
+    function removeURL(index) {
+      dataRef.child(currentGroup).once('value', snapshot => {
+        const urls = snapshot.val() || [];
+        urls.splice(index, 1);
+        dataRef.child(currentGroup).set(urls);
+      });
+    }
+
+    function openAll() {
+      dataRef.child(currentGroup).once('value', snapshot => {
+        (snapshot.val() || []).forEach(url => window.open(url, '_blank'));
+      });
+    }
+
+    dataRef.on('value', snapshot => {
+      const allData = snapshot.val() || {};
+      renderGroups(allData);
+      if (!currentGroup && Object.keys(allData).length > 0) {
+        currentGroup = Object.keys(allData)[0];
+        renderURLs(allData[currentGroup]);
+      }
+    });
+  </script>
+</body>
+</html>
